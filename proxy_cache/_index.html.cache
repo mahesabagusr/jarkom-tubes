@@ -1,6 +1,6 @@
 HTTP/1.1 200 OK
 Content-Type: text/html; charset=utf-8
-Content-Length: 195
+Content-Length: 189
 
 <!DOCTYPE html>
 <html>
@@ -8,7 +8,7 @@ Content-Length: 195
     <title>Tes Web Server</title>
 </head>
 <body>
-    <h1>Koneksi Sukses!</h1>
-    <p>Halaman ini disajikan oleh Web Server lokal Anda.</p>
+    <h1>Koneksi Berhasil!</h1>
+    <p>Ini Koneksi yang di buat oleh kelompok 9.</p>
 </body>
 </html>
