@@ -5,29 +5,29 @@ import datetime
 import time
 
 PROXY_PORT = 8080
-PROXY_HOST = '127.0.0.1'
-SERVER_HOST = '127.0.0.1'
+PROXY_HOST = '0.0.0.0'
+SERVER_HOST = '192.168.18.126' #dari ipconfig masing2 device
 SERVER_PORT = 8000
 SERVER_UDP_PORT = 9090
 CACHE_DIR = "proxy_cache"
 
-# Lock untuk sinkronisasi akses cache agar thread-safe tanpa race condition
+# biar ga race condition
 cache_lock = threading.Lock()
 
-# Buat folder cache jika belum ada
+# buat folder cache kalo blum ada
 if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR)
 
 
 def _send_error(sock, code, status, message):
-    """Helper: kirim HTTP error response ke client."""
+    # helper buat error handling
     body = f"<html><body><h1>{code} {status}</h1><p>{message}</p></body></html>".encode()
     header = f"HTTP/1.1 {code} {status}\r\nContent-Type: text/html; charset=utf-8\r\n"
     header += f"Content-Length: {len(body)}\r\n\r\n"
     try:
         sock.sendall(header.encode() + body)
     except Exception:
-        pass  # Client mungkin sudah disconnect
+        pass 
 
 
 def handle_client(client_socket, client_addr):
@@ -35,7 +35,7 @@ def handle_client(client_socket, client_addr):
     start_time = time.time()
 
     try:
-        client_socket.settimeout(10.0)  # Timeout baca dari client
+        client_socket.settimeout(10.0) 
         request = client_socket.recv(4096)
 
         if not request:
@@ -67,7 +67,7 @@ def handle_client(client_socket, client_addr):
         cache_filepath = os.path.join(CACHE_DIR, cache_filename)
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Cek cache
+        # cek cache
         with cache_lock:
             has_cache = os.path.exists(cache_filepath)
             cached_response = None
@@ -89,7 +89,7 @@ def handle_client(client_socket, client_addr):
             print(f"[{timestamp}] [{thread_id}] Proxy: {client_addr[0]} -> {url} | Cache HIT ({elapsed_ms:.2f} ms)")
 
         else:
-            # Forward ke Server
+            # forward ke server
             server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server_socket.settimeout(5.0)
 
@@ -104,7 +104,7 @@ def handle_client(client_socket, client_addr):
                         break
                     response += data
 
-                # Simpan ke cache hanya jika 200 OK
+                # simpan ke cache kalo 200 ok
                 if b"200 OK" in response:
                     with cache_lock:
                         try:
@@ -113,7 +113,7 @@ def handle_client(client_socket, client_addr):
                         except IOError as io_err:
                             print(f"[{timestamp}] [{thread_id}] Cache write error: {io_err}")
 
-                # Kirim ke client
+                # kirim ke client
                 try:
                     client_socket.sendall(response)
                 except (BrokenPipeError, ConnectionResetError) as send_err:

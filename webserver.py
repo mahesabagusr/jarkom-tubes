@@ -2,16 +2,17 @@ import socket
 import threading
 import os
 import datetime
+import mimetypes
 
-# Konfigurasi Port
+# konfigurasi
 TCP_PORT = 8000
 UDP_PORT = 9090
 HOST = '127.0.0.1'
-
-# IP Proxy yang diizinkan mengakses Web Server secara langsung.
-# Akses langsung dari client (browser) ke Web Server ditolak; browser
-# harus melewati Proxy (http://127.0.0.1:8080).
 ALLOWED_PROXY_IP = '127.0.0.1'
+
+# Web root: semua file statis dilayani dari folder HTML/ (relatif terhadap
+# lokasi webserver.py, jadi tidak tergantung current working directory).
+WEB_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "HTML")
 
 def handle_tcp_client(client_socket, client_address):
     thread_id = threading.current_thread().name
@@ -51,28 +52,61 @@ def handle_tcp_client(client_socket, client_address):
                 else:
                     path = "/index.html"
 
+            # Buang query string (mis. /index.html?x=1 -> /index.html)
+            if '?' in path:
+                path = path.split('?', 1)[0]
+
             if path == '/':
                 path = '/index.html'
 
-            filepath = '.' + path
+            # Bangun path file di dalam WEB_ROOT secara aman.
+            # normpath + lstrip mencegah directory traversal (mis. /../proxy.py).
+            rel_path = os.path.normpath(path).lstrip("\\/")
+            filepath = os.path.join(WEB_ROOT, rel_path)
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+            # Pastikan file final tetap berada di dalam WEB_ROOT
+            if not os.path.abspath(filepath).startswith(os.path.abspath(WEB_ROOT)):
+                error_body = b"<html><body><h1>403 Forbidden</h1><p>Path tidak diizinkan.</p></body></html>"
+                response_header = "HTTP/1.1 403 Forbidden\r\n"
+                response_header += "Content-Type: text/html; charset=utf-8\r\n"
+                response_header += f"Content-Length: {len(error_body)}\r\n\r\n"
+                client_socket.sendall(response_header.encode('utf-8') + error_body)
+                print(f"[{timestamp}] TCP Thread [{thread_id}]: {client_address[0]} requested {path} - 403 Forbidden (traversal)")
+                return
+
             try:
-                # Membaca file
+                # Membaca file (mode biner agar gambar/video/CSS utuh)
                 with open(filepath, 'rb') as f:
                     content = f.read()
 
+                # Tentukan Content-Type otomatis berdasarkan ekstensi file
+                content_type, _ = mimetypes.guess_type(filepath)
+                if content_type is None:
+                    content_type = "application/octet-stream"
+                # Tambahkan charset hanya untuk konten teks
+                if content_type.startswith("text/") or content_type in (
+                    "application/javascript", "application/json"
+                ):
+                    content_type += "; charset=utf-8"
+
                 # Membuat HTTP 200 OK Response
                 response_header = "HTTP/1.1 200 OK\r\n"
-                response_header += "Content-Type: text/html; charset=utf-8\r\n"
+                response_header += f"Content-Type: {content_type}\r\n"
                 response_header += f"Content-Length: {len(content)}\r\n\r\n"
 
                 client_socket.sendall(response_header.encode('utf-8') + content)
-                print(f"[{timestamp}] TCP Thread [{thread_id}]: {client_address[0]} requested {path} - 200 OK")
+                print(f"[{timestamp}] TCP Thread [{thread_id}]: {client_address[0]} requested {path} - 200 OK ({content_type})")
 
-            except FileNotFoundError:
-                # Membuat HTTP 404 Response
-                error_body = b"<html><body><h1>404 Not Found</h1></body></html>"
+            except (FileNotFoundError, IsADirectoryError):
+                # Coba sajikan halaman 404 custom dari HTML/status/404.html
+                error_path = os.path.join(WEB_ROOT, "status", "404.html")
+                try:
+                    with open(error_path, 'rb') as f:
+                        error_body = f.read()
+                except (FileNotFoundError, IsADirectoryError):
+                    error_body = b"<html><body><h1>404 Not Found</h1></body></html>"
+
                 response_header = "HTTP/1.1 404 Not Found\r\n"
                 response_header += "Content-Type: text/html; charset=utf-8\r\n"
                 response_header += f"Content-Length: {len(error_body)}\r\n\r\n"

@@ -40,11 +40,6 @@ def tcp_client(path="/index.html"):
 
 
 def _http_request(path):
-    """Kirim satu HTTP GET via Proxy secara senyap.
-
-    Mengembalikan tuple (ok: bool, elapsed_ms: float, info: str).
-    Dipakai oleh uji konkurensi agar output tiap client ringkas.
-    """
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.settimeout(10.0)
     start = time.time()
@@ -74,8 +69,7 @@ def _http_request(path):
 
 
 def concurrent_clients(num_clients, path="/index.html"):
-    """Kirim HTTP GET dari sejumlah client secara bersamaan (uji konkurensi)."""
-    print(f"\nMengirim {num_clients} HTTP GET bersamaan untuk {path} via Proxy...\n")
+    print(f"\nMengirim {num_clients} HTTP GET bersamaan untuk {path} via Proxy\n")
 
     results = []
     print_lock = threading.Lock()
@@ -99,7 +93,6 @@ def concurrent_clients(num_clients, path="/index.html"):
 
     total_ms = (time.time() - test_start) * 1000
 
-    # ── Statistik ────────────────────────────────────────────────
     successes = [r for r in results if r[1]]
     failures = [r for r in results if not r[1]]
     times = [r[2] for r in successes]
@@ -221,10 +214,10 @@ def udp_pinger():
 def show_menu():
     print("\n" + "="*50)
     print("  CLIENT - Sistem Jaringan Komputer")
-    print("  Client-Proxy-Server | Universitas Telkom")
+    print("  Client-Proxy-Server | Kelompok 9 Asik")
     print("="*50)
-    print("  [1] HTTP GET via Proxy (TCP)")
-    print("  [2] UDP QoS Ping Test")
+    print("  [1] TCP")
+    print("  [2] UDP")
     print("  [3] HTTP GET resource tertentu via Proxy")
     print("  [0] Keluar")
     print("="*50)
