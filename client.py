@@ -7,9 +7,9 @@ import os
 import datetime
 import threading
 
-PROXY_HOST = '127.0.0.1'
+PROXY_HOST = '192.168.18.211'
 PROXY_PORT = 8080
-SERVER_HOST = '127.0.0.1'
+SERVER_HOST = '192.168.18.126'
 SERVER_UDP_PORT = 9090
 
 CSV_LOG_PATH = "qos_log.csv"
@@ -110,17 +110,15 @@ def concurrent_clients(num_clients, path="/index.html"):
 
 def udp_pinger():
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    client.settimeout(1.0)  # Maksimal 1 detik timeout per paket
+    client.settimeout(1.0)  
 
     rtt_list = []
     packets_sent = 10
     packets_lost = 0
     total_bytes_received = 0
 
-    # Header CSV (buat file baru jika belum ada)
     write_header = not os.path.exists(CSV_LOG_PATH)
-    csv_rows = []  # Kumpulkan dulu, tulis setelah selesai
-
+    csv_rows = []  
     print(f"Mengirim {packets_sent} paket UDP ke {SERVER_HOST}:{SERVER_UDP_PORT}\n")
     test_start = time.time()
 
@@ -134,13 +132,12 @@ def udp_pinger():
             "rtt_ms": "",
             "bytes_received": ""
         }
-
         try:
             client.sendto(message.encode('utf-8'), (SERVER_HOST, SERVER_UDP_PORT))
             data, server = client.recvfrom(1024)
             recv_time = time.time()
 
-            rtt = (recv_time - send_time) * 1000  # dalam milisekon
+            rtt = (recv_time - send_time) * 1000 
             rtt_list.append(rtt)
             total_bytes_received += len(data)
 
@@ -156,13 +153,11 @@ def udp_pinger():
             print(f"Paket {i}: Request timed out")
 
         csv_rows.append(row)
-        # Jeda 100ms antar paket agar pengiriman bersifat periodik
         time.sleep(0.1)
 
     test_end = time.time()
     duration = test_end - test_start
 
-    # Kalkulasi Statistik Akhir
     print("\n--- Statistik QoS Ping UDP ---")
     min_rtt = avg_rtt = max_rtt = jitter = throughput = 0.0
 
@@ -188,17 +183,12 @@ def udp_pinger():
     print(f"Packet Loss: {loss_pct:.2f}%")
     print(f"Throughput : {throughput:.4f} kbps")
 
-    # Tulis ke CSV
     with open(CSV_LOG_PATH, 'a', newline='') as csvfile:
         fieldnames = ["session_start", "seq", "status", "rtt_ms", "bytes_received"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
         if write_header:
             writer.writeheader()
-
         writer.writerows(csv_rows)
-
-        # Baris ringkasan sesi
         writer.writerow({
             "session_start": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "seq": "SUMMARY",
@@ -259,7 +249,6 @@ def menu_http():
     print("  [2] Multi   (banyak client, request bersamaan)")
     print("  [0] Kembali")
     sub = input("  Pilih mode: ").strip()
-
     if sub == "1":
         tcp_client("/index.html")
     elif sub == "2":
@@ -271,12 +260,9 @@ def menu_http():
 
 
 if __name__ == "__main__":
-    # Tetap dukung argumen CLI untuk kompatibilitas pengujian otomatis
     if len(sys.argv) > 1:
         mode = None
         path = "/index.html"
-
-        # Parsing argumen secara fleksibel untuk mendukung -, --, en-dash, em-dash
         for i in range(1, len(sys.argv)):
             arg = sys.argv[i]
             clean_arg = arg.lstrip('-\u2013\u2014').lower()
@@ -286,7 +272,6 @@ if __name__ == "__main__":
                 mode = arg.lower()
             elif arg.startswith("/"):
                 path = arg
-
         if mode == "tcp":
             tcp_client(path)
         elif mode == "udp":
@@ -295,11 +280,9 @@ if __name__ == "__main__":
             print("Penggunaan: python client.py [--mode tcp|udp] [/path]")
             sys.exit(1)
     else:
-        # Mode menu interaktif
         while True:
             show_menu()
             choice = input("  Pilih menu: ").strip()
-
             if choice == "1":
                 menu_http()
             elif choice == "2":
