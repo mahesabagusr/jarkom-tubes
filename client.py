@@ -5,6 +5,7 @@ import statistics
 import csv
 import os
 import datetime
+import threading
 
 PROXY_HOST = '127.0.0.1'
 PROXY_PORT = 8080
@@ -36,6 +37,83 @@ def tcp_client(path="/index.html"):
         print(f"Koneksi gagal: {e}")
     finally:
         client.close()
+
+
+def _http_request(path):
+    """Kirim satu HTTP GET via Proxy secara senyap.
+
+    Mengembalikan tuple (ok: bool, elapsed_ms: float, info: str).
+    Dipakai oleh uji konkurensi agar output tiap client ringkas.
+    """
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client.settimeout(10.0)
+    start = time.time()
+    try:
+        client.connect((PROXY_HOST, PROXY_PORT))
+        request = f"GET {path} HTTP/1.1\r\nHost: {PROXY_HOST}\r\n\r\n"
+        client.sendall(request.encode('utf-8'))
+
+        response = b""
+        while True:
+            data = client.recv(4096)
+            if not data:
+                break
+            response += data
+
+        elapsed = (time.time() - start) * 1000
+        if response:
+            status = response.split(b"\r\n", 1)[0].decode('utf-8', errors='ignore')
+        else:
+            status = "Tidak ada respons"
+        return True, elapsed, status
+    except Exception as e:
+        elapsed = (time.time() - start) * 1000
+        return False, elapsed, f"Error: {e}"
+    finally:
+        client.close()
+
+
+def concurrent_clients(num_clients, path="/index.html"):
+    """Kirim HTTP GET dari sejumlah client secara bersamaan (uji konkurensi)."""
+    print(f"\nMengirim {num_clients} HTTP GET bersamaan untuk {path} via Proxy...\n")
+
+    results = []
+    print_lock = threading.Lock()
+
+    def worker(idx):
+        ok, elapsed, info = _http_request(path)
+        with print_lock:
+            results.append((idx, ok, elapsed, info))
+            tag = "OK   " if ok else "GAGAL"
+            print(f"  Client #{idx:<3} [{tag}] {elapsed:8.2f} ms | {info}")
+
+    threads = []
+    test_start = time.time()
+    for i in range(1, num_clients + 1):
+        t = threading.Thread(target=worker, args=(i,), name=f"LoadClient-{i}")
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
+    total_ms = (time.time() - test_start) * 1000
+
+    # ── Statistik ────────────────────────────────────────────────
+    successes = [r for r in results if r[1]]
+    failures = [r for r in results if not r[1]]
+    times = [r[2] for r in successes]
+
+    print("\n--- Ringkasan Uji Konkurensi ---")
+    print(f"Total client     : {num_clients}")
+    print(f"Berhasil         : {len(successes)}")
+    print(f"Gagal            : {len(failures)}")
+    if times:
+        print(f"Waktu respons    : Min {min(times):.2f} ms | "
+              f"Avg {statistics.mean(times):.2f} ms | Max {max(times):.2f} ms")
+    print(f"Total durasi     : {total_ms:.2f} ms (seluruh client berjalan paralel)")
+    throughput = (len(successes) / (total_ms / 1000.0)) if total_ms > 0 else 0.0
+    print(f"Throughput       : {throughput:.2f} request/detik")
 
 def udp_pinger():
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -163,6 +241,41 @@ def menu_udp():
     print("  Memulai UDP QoS Ping Test ke server...")
     udp_pinger()
 
+def menu_concurrent():
+    raw = input("  Jumlah client bersamaan (default: 10): ").strip()
+    try:
+        num = int(raw) if raw else 10
+    except ValueError:
+        print("  [!] Input tidak valid, menggunakan 10.")
+        num = 10
+    if num < 1:
+        print("  [!] Minimal 1 client, menggunakan 1.")
+        num = 1
+    path = input("  Path resource (default: /index.html): ").strip()
+    if not path:
+        path = "/index.html"
+    if not path.startswith("/"):
+        path = "/" + path
+    concurrent_clients(num, path)
+
+
+def menu_http():
+    """Submenu untuk Choice [1]: pilih mode Single atau Multi."""
+    print("\n  --- HTTP GET via Proxy ---")
+    print("  [1] Single  (1 client, satu thread)")
+    print("  [2] Multi   (banyak client, request bersamaan)")
+    print("  [0] Kembali")
+    sub = input("  Pilih mode: ").strip()
+
+    if sub == "1":
+        tcp_client("/index.html")
+    elif sub == "2":
+        menu_concurrent()
+    elif sub == "0":
+        return
+    else:
+        print("  [!] Pilihan tidak valid.")
+
 
 if __name__ == "__main__":
     # Tetap dukung argumen CLI untuk kompatibilitas pengujian otomatis
@@ -195,7 +308,7 @@ if __name__ == "__main__":
             choice = input("  Pilih menu: ").strip()
 
             if choice == "1":
-                tcp_client("/index.html")
+                menu_http()
             elif choice == "2":
                 menu_udp()
             elif choice == "3":
